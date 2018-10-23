@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Spyder Editor
-
-Este é um arquivo de script temporário.
+tESTANDO O COMIT DO GITHUB
+Este é um arquivo que será deletado em breve
 """
 
 import sys
