@@ -32,7 +32,7 @@ tuc = leapseconds to tuc
 """
 def getNmeaTime(nmea, tuc):
     time = datetime(1, 1, 1, nmea[0], nmea[1], nmea[2])
-    return time - timedelta(hours=0) + timedelta(seconds=0);
+    return time - timedelta(hours=0) + timedelta(seconds=18);
 
 """
 #getSatellites function adjusts RINEX satellite number to match NMEA satellite number format
@@ -170,6 +170,7 @@ def readNMEA(fileName):
     searchSat = False
     numberSat = 0
     satellites = []
+    checkGPSsat = []
     hTime = 0
     mTime = 0
     sTime = 0
@@ -181,9 +182,9 @@ def readNMEA(fileName):
             if len(dataArray) == 0: # Skip blank lines
                 continue
             sentenceId = dataArray[0]
-            if searchFix and sentenceId == "GNGNS": # Searching for GNSS fixes
+            if searchFix and sentenceId == "GPGGA": # Searching for GNSS fixes
                 fixQuality = dataArray[6]
-                if fixQuality[0] != 'N' and fixQuality[1] != 'N': # Check if solution exists
+                if fixQuality[0] == '1': # Check if solution exists
                     numberSat = int(dataArray[7]) # Number of satellites in fix
                     hTime = int(dataArray[1][0:2]) # Hour of fix
                     mTime = int(dataArray[1][2:4]) # Minute of fix
@@ -192,13 +193,34 @@ def readNMEA(fileName):
                     searchFix = False
                     nlines = 0
                     satellites = []
-            if searchSat and sentenceId == "GNGSA": # Searching for satellites in fix
+            if searchSat and sentenceId == "GPGSA": # Searching for number of GPS satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    checkGPSsat += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGPS = len(checkGPSsat)
+                    
+            if searchSat and sentenceId == "GNGSA": # Searching for GPS and GLONASS satellites in fix
                 fixType = int(dataArray[2]) # Checks if fix exists
                 if fixType in [2, 3]:
                     satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGL = len(satellites) - satGPS
                     nlines += 1 # Looks at second line of observed satellites
-                    if nlines == 2:
-                        epoch = (hTime, mTime, sTime, numberSat, satellites)
+                    
+            if searchSat and sentenceId == "BDGSA": # Searching for Beidou satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satBD = len(satellites) - satGPS - satGL
+                    nlines += 1 # Looks at second line of observed satellites
+                    
+            if searchSat and sentenceId == "GAGSA": # Searching for Beidou satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGA = len(satellites) - satGPS - satGL - satBD
+                    nlines += 1 # Looks at second line of observed satellites
+                    if nlines == 5:
+                        epoch = (hTime, mTime, sTime, numberSat, satellites,satGPS,satGL,satBD,satGA)
                         result.append( epoch )
                         if numberSat != len(satellites):
                             print "Incoherent satellite count at the line ", \
@@ -267,7 +289,7 @@ def filterRINEX(fileName, nmea):
                         if len(out) == 0:
                             out.append(getRinexEpoch(epoch, sat, currNmea[4])) # Compares RINEX observed satellites to NMEA's
                         if sat[-numSat] in currNmea[4]: # Test Sat to append in out
-                            out.append(line)
+                            out.append(line[:32])
                         numSat -= 1
                         if numSat == 0: # Finished reading all satellites
                             searchTime = True
@@ -288,15 +310,15 @@ sys.stdout = log_file
 isDebug = True
 if isDebug:
 	#NMEA = readNMEA('NMEA_Tools.txt')
-	NMEA  = readNMEA('02_20170824135855.txt')
+	NMEA  = readNMEA('20190115_092503.txt')
 	#for item in NMEA:
 	    #if (item[2]+18) % 15 == 0:
 	    #   print item
-	RINEX = filterRINEX('onrj2361.17o', NMEA)
-	with open('filteredRinex20_G_Debugg11111.txt', 'w') as outputFile:
-	    for line in RINEX:
-	        outputFile.write(line)
-	outputFile.close()
+#	RINEX = filterRINEX('onrj2361.17o', NMEA)
+#	with open('filteredRinex20_G_Debugg11111.txt', 'w') as outputFile:
+#	    for line in RINEX:
+#	        outputFile.write(line)
+#	outputFile.close()
 
 
 if len(sys.argv) == 4:
