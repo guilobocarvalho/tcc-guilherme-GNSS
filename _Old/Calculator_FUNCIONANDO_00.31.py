@@ -105,17 +105,27 @@ def getSatellites(line):
         result.append(0)
     return result
 
+def getObservation(line):
+    result = []
+    pseudorange = float(line[0:14])
+    doppler = float(line[54:62])
+    result.append(pseudorange)
+#    result.append(doppler)
+#    result.append(measurements)
+#    print measurements
+    return pseudorange,doppler
+
 def smoothRange(measuredRange,lastsmoothedRange,doppler,weight):
     l1length = 299792458.0/1575420000
-    deltaW = 0.05 # how much weight is added to each epoch
-    Wrange = 1 - weight*deltaW # reduces weight for measured range
+    deltaW = 0.05
+    Wrange = 1 - weight*deltaW
     if Wrange < 0.01:
-        Wrange = 0.01 # minimum weight is 1%
+        Wrange = 0.01
     
-    Wdoppler = 0 + weight*deltaW # increases weight for smoothed range
+    Wdoppler = 0 + weight*deltaW
     if Wdoppler > 0.99:
-        Wdoppler = 0.99 # maximum weight is 99%
-    result = Wrange*measuredRange + Wdoppler * (lastsmoothedRange-doppler*l1length) #formula for doppler smoothing
+        Wdoppler = 0.99
+    result = Wrange*measuredRange + Wdoppler * (lastsmoothedRange-doppler*l1length)
     return result
 
 """
@@ -191,105 +201,82 @@ def readNMEA(fileName):
                         searchFix = True # Starts looking for next fix
         nmeaFile.close()
     return result
-
-fileName = '20190115_Levantamento_8min.19o'
-output = '20190115_Levantamento_8min_Smoothed.19o'
-def smoothRINEX(fileName,output):
-    result = []
-    epochsat = []
-    out = []
-    onHeader = True
-    currTime = None
-    searchTime = True
-    ignoreLines = 0
-    extendLines = 0
-    numSat = 0
-    tuc = 0
-    sat = []
-    obs = []
-    epochlist = []
-    epochnum = 0
-    with open(fileName, 'r') as rinexFile:
-        for line in rinexFile:
-            if onHeader: # Keeps Header and gets leap seconds
+fileName = 'Python compare.txt'
+#def readRINEX(fileName):
+result = []
+epochsat = []
+out = []
+onHeader = True
+currTime = None
+searchTime = True
+ignoreLines = 0
+extendLines = 0
+numSat = 0
+tuc = 0
+sat = []
+obs = []
+allobs = []
+obslist = []
+epochlist = []
+epochnum = 0
+l1length = 299792458.0/1575420000
+deltaW = 0.05
+with open(fileName, 'r') as rinexFile:
+    for line in rinexFile:
+        if onHeader: # Keeps Header and gets leap seconds
+            out.append(line)
+            if "LEAP SECONDS" in line:
+                tuc = int(line[0:6]) # Gets Leap seconds
+            if "END OF HEADER" in line:
+                onHeader = False
+        else: # Start reading epochs
+            if searchTime:
+                if ignoreLines == 0:
+                    out.append(line)
+#                        currTime = getRinexTime(line)
+                    numSat = int(line[29:32]) # Number of satellites in epoch
+                    extendLines =  (numSat - 1) / 12 # Check if epoch has more than 1 line of observed satellites
+                    sat = getSatellites(line[32:]) # List satellites for this epoch
+                    searchTime = False # Start reading each satellite observation
+                    countSat = 0
+                else:
+                    ignoreLines -= 1 # Counts down lines that need to be skipped
+                    continue
+                if searchTime == False and extendLines ==0:
+                    epoch = (epochnum,sat)
+                    epochsat.append(epoch)
+                if searchTime == False and extendLines > 0:
+                    extendLines -= 1
+                    sat = sat + getSatellites(line[32:]) # concatenates second satellite line to first
+                    epoch = (epochnum,sat)
+                    epochsat.append(epoch)
+            else: # Start reading each satellite observation
                 out.append(line)
-                if "LEAP SECONDS" in line:
-                    tuc = int(line[0:6]) # Gets Leap seconds
-                if "END OF HEADER" in line:
-                    onHeader = False
-            else: # Start reading epochs
-                if searchTime:
-                    if ignoreLines == 0:
-                        out.append(line)
-    #                        currTime = getRinexTime(line)
-                        numSat = int(line[29:32]) # Number of satellites in epoch
-                        extendLines =  (numSat - 1) / 12 # Check if epoch has more than 1 line of observed satellites
-                        sat = getSatellites(line[32:]) # List satellites with timestamp for this epoch
-                        searchTime = False # Start reading each satellite observation
-                        countSat = 0
-                    else:
-                        ignoreLines -= 1 # Counts down lines that need to be skipped
-                        continue
-                    if searchTime == False and extendLines == 0:
-                        epoch = (epochnum,sat) # Start epoch list with satellites
-                        epochsat.append(epoch) 
-                    if searchTime == False and extendLines > 0:
-                        extendLines -= 1
-                        sat = sat + getSatellites(line[32:]) # concatenates second satellite line to first
-                        epoch = (epochnum,sat)
-                        epochsat.append(epoch)
-                else: # Start reading each satellite observation
-                    pseudorange = float(line[0:14]) # Reads measured pseudorange
-                    doppler = float(line[52:62]) # reads measured doppler
-                    if epochnum == 0: # stores first epoch measurements
-                        measurement = (pseudorange,doppler) # creates first measurement epoch
-                        obs.append(measurement)
-                        out.append(line) # output for rinexfile format
-                    if epochnum != 0: # reads all other epochs
-                        for i in range(0,len(epochlist[epochnum-1][1]),2): # loops satellite list to read satellite number
-                            if len(sat) == len(epochlist[epochnum-1][1]): 
-                                if sat[len(sat)-numSat*2] == epochlist[epochnum-1][1][i]: # If satellite exists last epoch
-                                    sat[len(sat)-numSat*2+1] = epochlist[epochnum-1][1][i+1]+1
-                                    lastsmoothedRange = epochlist[epochnum-1][2][i/2][0] # grabs last epoch range
-                                    weight = sat[len(sat)-numSat*2+1] # adds weight to this satellite
-                                    newRange = smoothRange(pseudorange,lastsmoothedRange,doppler,weight)# calculates smoothed range
-                                    measurement = (newRange,doppler)
-                                    obs.append(measurement)
-                                    newRangeline = '  ' + str(format(newRange,'.3f')) + line[14:62] + '\n'
-                                    out.append(newRangeline)
-    #                            check = epochlist[epochnum-1][1].count(sat[i])
-    #                            if check == 0:
-    #                                measurement = (pseudorange,doppler)
-    #                                obs.append(measurement)
-    #                                out.append(line)
-    #                        else:
-    #                            dif =  len(epochlist[epochnum-1][1]) - len(sat)
-    #                            check = epochlist[epochnum-1][1].count(sat[i])
-                                
-                                
-    #                        else:
-    #                            measurement = (newRange,doppler)
-    #                            obs.append(measurement)
-                                
-    #                print sat[len(sat)-numSat*2+1]
-                    numSat -= 1
-                            
-                    if numSat == 0: # END OF EPOCH: Finished reading all satellites
-                        savetolist = (epochnum,sat,obs)
-    #                    print savetolist
-                        epochlist.append(savetolist)
-                        print 'end of epoch ',epochnum
-                        searchTime = True # Read new epoch
-                        epochnum +=1
-                        obs = []
-        rinexFile.close()
-#with open(output, 'w') as outputFile:
-#    for line in out:
-#        outputFile.write(line)
-#    outputFile.close()
-
-#readRINEX(fileName,output)
-    
+                pseudorange = float(line[0:14])
+                doppler = float(line[52:62])
+                measurement = (pseudorange,doppler)
+                obs.append(measurement)
+                if epochnum != 0:
+                    for i in range(0,len(epochlist[epochnum-1][1]),2):
+                        if sat[len(sat)-numSat*2] == epochlist[epochnum-1][1][i]:
+                            sat[len(sat)-numSat*2+1] = epochlist[epochnum-1][1][i+1]+1
+#                            print epochlist[epochnum-1][2][i/2][0]
+                            print smoothRange(pseudorange,epochlist[epochnum-1][2][i/2][0],doppler,sat[len(sat)-numSat*2+1])
+#                            DEFINE FUNCTION HERE
+                
+#                print sat[len(sat)-numSat*2+1]
+                numSat -= 1
+                        
+                if numSat == 0: # END OF EPOCH: Finished reading all satellites
+                    savetolist = (epochnum,sat,obs)
+#                    print savetolist
+                    epochlist.append(savetolist)
+#                    print 'end of epoch ',epochnum
+                    searchTime = True # Read new epoch
+                    epochnum +=1
+                    obs = []
+    rinexFile.close()
+#    print epochlist
 """
 epochlist:
 For satellites:
@@ -297,6 +284,9 @@ For satellites:
 For measurments:
     epochlist[epochnum][2][0=pseudorange 1=doppler]
 """            
+#with open(outfile, 'w') as outputFile:
+#	    for line in result:
+#	        outputFile.write(line)
 #return result
 
 
@@ -613,23 +603,12 @@ def createExcel(fileName,data):
         
     workbook.close()
 
-#createExcel('20190115_Levantamento_8min_Smooth_GPS.pos',errorPOSsmartphone('20190115_Levantamento_8min_Smooth_GPS.pos'))
 
-print'Standard Deviation POS'
-sdPOS('20190115_Levantamento_8min_Smooth_GPS_IonoTropoOn.pos')
-print
-print'RMS POS'
-rmsPOS('20190115_Levantamento_8min_Smooth_GPS_IonoTropoOn.pos')
-print
-
+"""
 print 'Standard Deviation NMEA'
 sdNMEA('20190115_092503.txt')
 print
 
-print 'RMS NMEA'
-rmsNMEA('20190115_092503.txt')
-print
-"""
 print'Standard Deviation POS OFF'
 sdPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
 print
@@ -638,6 +617,9 @@ print 'Standard Deviation POS Broad and Saas'
 sdPOS('20190115_LevantamentoCompleto.pos')
 print
 
+print 'RMS NMEA'
+rmsNMEA('20190115_092503.txt')
+print
 
 print 'RMS POS OFF'
 rmsPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
