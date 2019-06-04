@@ -1,0 +1,676 @@
+# -*- coding: utf-8 -*-
+
+import math
+import matplotlib.pyplot as plt
+import xlsxwriter
+from datetime import datetime, timedelta
+import inspect
+from numbers import Number
+
+a = 6378137.0
+e2 = (0.08181919104282)**2
+
+LatMarco = -(22 + 49/60.0 + 08.76793/3600)
+LonMarco = -(43 + 18/60.0 + 23.95193/3600)
+hMarco = -1.461
+
+Xonrj = 4283638.3579
+Yonrj = -4026028.8217
+Zonrj = -2466096.8361
+
+Xriod = 4280294.8786
+Yriod = -4034431.2247 
+Zriod = -2458141.3800
+
+""""
+MATH FUNCTIONS:
+
+deg2xyz
+xyz2deg
+radianError
+"""
+def deg2xyz(ddLat,ddLon,h): #VALIDADO
+    radLat = math.radians(ddLat)
+    radLon = math.radians(ddLon)
+    N = ( a / ((1-(e2)*(math.sin(radLat))**2)**(0.5)))
+    X = (N+h)*math.cos(radLat)*math.cos(radLon)
+    Y = (N+h)*math.cos(radLat)*math.sin(radLon)
+    Z = (N*(1-e2)+h)*math.sin(radLat)
+    XYZ = (X,Y,Z)
+    return XYZ
+
+def xyz2deg(X,Y,Z): #VALIDADO
+    b = a*((1-e2)**0.5)
+    elinha2 = e2/(1-e2)
+    tanU = (Z/((X**2+Y**2)**0.5))*(a/b)
+    senU = tanU/((1+tanU**2)**0.5)
+    cosU = 1/((1+tanU**2)**0.5)
+    radLat = math.atan((Z+(elinha2*b*(senU**3)))/((X**2+Y**2)**0.5-e2*a*cosU**3))
+    radLon = math.atan(Y/X)
+    N = ( a / ((1-(e2)*(math.sin(radLat))**2)**(0.5)))
+    h = (((X**2+Y**2)**0.5)/math.cos(radLat))-N
+    ddLat = math.degrees(radLat)
+    ddLon = math.degrees(radLon)
+    LatLonH = (ddLat,ddLon,h)
+    return LatLonH
+
+def radianError(phi1,lamb1,phi2,lamb2): #VALIDADO
+    phiAvg = math.radians((phi2-phi1)/2)
+    phi1 = math.radians(phi1)
+    lamb1 = math.radians(lamb1)
+    phi2 = math.radians(phi2)
+    lamb2 = math.radians(lamb2)
+    A = 1 + 3.0/4*e2 + 45.0/64*e2**2 + 175.0/256*e2**3 + 11025.0/16384*e2**4 + 43659.0/65536*e2**5
+    B = 3.0/4*e2 + 15.0/16*e2**2 + 525.0/512*e2**3 + 2205.0/2048*e2**4 + 72765.0/65536*e2**5
+    C = 15.0/64*e2**2 + 105.0/256*e2**3 + 2205.0/4096*e2**4 + 10395.0/16384*e2**5
+    D = 35.0/512*e2**3 + 315.0/2048*e2**4 + 31185.0/131072*e2**5
+    E = 315.0/16384*e2**4 + 3465.0/65536*e2**5
+    F = 693.0/131072*e2**5
+    phiA = A*(phi2-phi1)
+    phiB = B/2 * (math.sin(2*phi2) - math.sin(2*phi1))
+    phiC = C/4 * (math.sin(4*phi2) - math.sin(4*phi1))
+    phiD = D/6 * (math.sin(6*phi2) - math.sin (6*phi1))
+    phiE = E/8 * (math.sin(8*phi2) - math.sin(8*phi1))
+    phiF = F/10 * (math.sin(10*phi2) - math.sin(10*phi1))
+    
+    M = (a*(1-e2)) / (1-e2*math.sin(phiAvg)**2)**(1.5)
+    N = ( a / ((1-(e2)*(math.sin(phiAvg))**2)**(0.5)))
+      
+    Ssimples = M * (phi2-phi1)
+    
+    S = a*(1-e2)*(phiA - phiB + phiC - phiD + phiE - phiF) #Comrpimento de arco de Meridiano
+    L = N*math.cos(phiAvg)*(lamb2-lamb1)#Comprimento de arco de Paralelo
+
+    result = (S,L)
+
+    return result
+"""
+SUPPORT FUNCTIONS:
+getRinexTime
+"""
+
+"""
+FILE READING FUNCTIONS:
+    
+readNMEA
+readRINEX
+readPOS
+"""
+
+def readNMEA(fileName):
+    result = []
+    searchFix = True
+    searchSat = False
+    numberSat = 0
+    satellites = []
+    checkGPSsat = []
+    hTime = 0
+    mTime = 0
+    sTime = 0
+    nlines = 0
+    with open(fileName, 'r') as nmeaFile:
+        for line in nmeaFile:
+            line = line.translate(None, '$')
+            dataArray = line.split(',')
+            if len(dataArray) == 0: # Skip blank lines
+                continue
+            sentenceId = dataArray[0]
+            if searchFix and sentenceId == "GPGGA": # Searching for GNSS fixes
+                fixQuality = dataArray[6]
+                if fixQuality[0] == '1': # Check if solution exists
+                    numberSat = int(dataArray[7]) # Number of satellites in fix
+                    hTime = int(dataArray[1][0:2]) # Hour of fix
+                    mTime = int(dataArray[1][2:4]) # Minute of fix
+                    sTime = int(dataArray[1][4:6]) # Second of fix
+                    searchSat = True # Start looking for fix satellites
+                    searchFix = False
+                    nlines = 0
+                    satellites = []
+            if searchSat and sentenceId == "GPGSA": # Searching for number of GPS satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    checkGPSsat += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGPS = len(checkGPSsat)
+                    
+            if searchSat and sentenceId == "GNGSA": # Searching for GPS and GLONASS satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGL = len(satellites) - satGPS
+                    nlines += 1 # Looks at second line of observed satellites
+                    
+            if searchSat and sentenceId == "BDGSA": # Searching for Beidou satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satBD = len(satellites) - satGPS - satGL
+                    nlines += 1 # Looks at second line of observed satellites:
+                    
+                    
+            if searchSat and sentenceId == "GAGSA": # Searching for Beidou satellites in fix
+                fixType = int(dataArray[2]) # Checks if fix exists
+                if fixType in [2, 3]:
+                    satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
+                    satGA = len(satellites) - satGPS - satGL - satBD
+                    nlines += 1 # Looks at second line of observed satellites
+                    if nlines == 5:
+                        epoch = (hTime, mTime, sTime, numberSat, satellites,satGPS,satGL,satBD,satGA)
+                        result.append( epoch )
+                        if numberSat != len(satellites):
+                            print "Incoherent satellite count at the line ", \
+                            len(result), "\n" 
+                        searchSat = False
+                        searchFix = True # Starts looking for next fix
+        nmeaFile.close()
+    return result
+
+#return result
+
+
+#rinex = readRINEX('SmoothingDebug.19o')
+
+"""
+NMEA FILE PROCESSING
+
+This step reads the nmea file and calculates the error from the smartphone solution.
+"""
+
+def nmea2deg(nmeafileName):
+    result = []
+    with open(nmeafileName, 'r') as nmeaFile:
+        for line in nmeaFile:
+            line = line.translate(None, '$')
+            dataArray = line.split(',')
+            if len(dataArray) == 0: # Pula linhas vazias
+                continue
+            sentenceId = dataArray[0]
+            if sentenceId == "GPGGA":
+                fixQuality = dataArray[6]
+                #if fixQuality[0] != 'N' and fixQuality[1] != 'N':
+                if fixQuality[0] != '0':
+                    hTime = int(dataArray[1][0:2])
+                    mTime = int(dataArray[1][2:4])
+                    sTime = int(dataArray[1][4:6])
+                    dLat = int(dataArray[2][0:2])
+                    mLat = float(dataArray[2][2:])
+                    dLon = int(dataArray[4][0:3])
+                    mLon = float(dataArray[4][3:])
+                    h = float(dataArray[9]) + float(dataArray[11])
+                    sat = int(dataArray[7])
+                    ddLat = dLat + mLat/60
+                    ddLon = dLon + mLon/60
+                    if dataArray[3] == "S":
+                        ddLat = -ddLat
+                    if dataArray[5] == "W":
+                        ddLon = -ddLon
+                    epoch = (hTime, mTime, sTime, ddLat, ddLon, h,sat)
+                    result.append( epoch )
+        nmeaFile.close()
+        return result
+    
+def errorNMEA(nmeafileName):
+    result = []
+    nmea = nmea2deg(nmeafileName)
+    sat = readNMEA(nmeafileName)
+    for coord in nmea:
+        error = radianError(LatMarco,LonMarco,coord[3],coord[4])
+        herror = coord[5] - hMarco
+        epoch = (coord[0], coord[1], coord[2], error[0], error[1], herror,coord[6])
+        result.append( epoch )
+    return result
+
+"""
+.POS FILE PROCESSING
+
+This step reads a .POS file in XYZ format and calculates the error from the survey
+"""
+
+def pos2xyz(fileName):
+    result = []
+    with open(fileName, 'r') as posFile:
+        for line in posFile:
+            if line[0] == '%':
+                continue
+            else:
+                dataArray = line.split()
+                if len(dataArray) == 0: # Pula linhas vazias
+                    continue
+                hTime = int(dataArray[1][0:2])
+                mTime = int(dataArray[1][3:5])
+                sTime = int(dataArray[1][6:8])
+                Xpos = float(dataArray[2])
+                Ypos = float(dataArray[3])
+                Zpos = float(dataArray[4])
+                epoch = (hTime, mTime, sTime, Xpos, Ypos, Zpos)
+                result.append( epoch )            
+        posFile.close()
+    return result
+
+def errorPOSriod(fileName):
+    result = []
+    DDriod = xyz2deg(Xriod,Yriod,Zriod)
+    XYZpos = pos2xyz(fileName)
+    for coord in XYZpos:
+        DDpos = xyz2deg(coord[3],coord[4],coord[5])
+        LatLonError = radianError(DDriod[0],DDriod[1],DDpos[0],DDpos[1])
+        herror = DDpos[2] - DDriod[2]
+        
+        epoch = (coord[0], coord[1], coord[2], LatLonError[0], LatLonError[1], herror)
+        result.append( epoch )
+    return result
+
+def errorPOSsmartphone(fileName):
+    result = []
+    XYZpos = pos2xyz(fileName)
+    for coord in XYZpos:
+        DDpos = xyz2deg(coord[3],coord[4],coord[5])
+        LatLonError = radianError(LatMarco,LonMarco,DDpos[0],DDpos[1])
+        herror = DDpos[2] - hMarco
+        
+        epoch = (coord[0], coord[1], coord[2], LatLonError[0], LatLonError[1], herror)
+        result.append( epoch )
+    return result
+
+"""
+ERROR ADJUSTMENT
+
+This final step adjusts the NMEA coordinates to the POS file
+"""
+def nmea2xyz(nmeafileName):
+    result = []
+    nmeaDD = nmea2deg(nmeafileName)
+    for coord in nmeaDD:
+        XYZnmea = deg2xyz(coord[3],coord[4],coord[5])
+        epoch = (coord[0], coord[1], coord[2], XYZnmea[0], XYZnmea[1], XYZnmea[2])
+        result.append( epoch )
+    return result
+        
+def adjustmentNMEA(posFile,nmeafileName):
+    result = []
+    ref = pos2xyz(posFile)
+    nmea = nmea2xyz(nmeafileName)
+    for coord in nmea:
+        for pos in ref:
+            if pos[0] == coord[0] and pos[1] == coord[1] and pos[2] == coord[2]:
+                hTime = coord[0]
+                mTime = coord[1]
+                sTime = coord[2]                
+                Xerror = pos[3] - Xriod
+                Yerror = pos[4] - Yriod
+                Zerror = pos[5] - Zriod
+                
+                Xadjusted = coord[3] - Xerror
+                Yadjusted = coord[4] - Yerror
+                Zadjusted = coord[5] - Zerror
+                LatLon = xyz2deg(Xadjusted,Yadjusted,Zadjusted)
+                adjusted = (hTime, mTime, sTime, LatLon[0],LatLon[1],LatLon[2])
+                result.append( adjusted )            
+    return result
+
+def adjustmentErrorNMEA(posFile,nmeafileName):
+    result = []
+    nmea = adjustmentNMEA(posFile,nmeafileName)
+    for coord in nmea:
+        error = radianError(LatMarco,LonMarco,coord[3],coord[4])
+        herror = coord[5] - hMarco
+        epoch = (coord[0], coord[1], coord[2], error[0], error[1], herror)
+        result.append( epoch )
+    return result
+
+"""
+Statistical calculations
+Calculates Averages, Root mean errors and standard deviation.
+"""
+def averageNMEA(fileName):
+    nmeaCoords = nmea2deg(fileName)
+    sumLat = 0
+    sumLon = 0
+    sumH = 0
+    for coord in nmeaCoords:
+        sumLat += coord[3]
+        sumLon += coord[4]
+        sumH += coord[5]
+    averageLat = sumLat/len(nmeaCoords)
+    averageLon = sumLon/len(nmeaCoords)
+    averageH = sumH/len(nmeaCoords)
+    avgError = radianError(LatMarco,LonMarco,averageLat,averageLon)
+    avgHerror = averageH - hMarco
+    result = (avgError[0],avgError[1],avgHerror)
+    print result
+    return result
+    
+    
+
+def averagePOS(fileName):
+    XYZpos = pos2xyz(fileName)
+    sumLat = 0
+    sumLon = 0
+    sumH = 0
+    for coord in XYZpos:
+        DDpos = xyz2deg(coord[3],coord[4],coord[5])
+        sumLat += DDpos[0]
+        sumLon += DDpos[1]
+        sumH += DDpos[2]
+    averageLat = sumLat/len(XYZpos)
+    averageLon = sumLon/len(XYZpos)
+    averageH = sumH/len(XYZpos)
+    avgError = radianError(LatMarco,LonMarco,averageLat,averageLon)
+    avgHerror = averageH - hMarco
+    result = (avgError[0],avgError[1],avgHerror)
+    print result
+    return result
+
+def rmsNMEA(fileName):
+    RMSvector = errorNMEA(fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0
+    for coord in RMSvector:
+        squareSumLat += (coord[3])**2
+        squareSumLon += (coord[4])**2
+        squareSumH += (coord[5])**2
+    RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
+    RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
+    RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
+    result = (RMSLat,RMSLon,RMSH)
+    print result
+    print len(RMSvector)
+    return result
+
+def rmsAdjNMEA(posFile,fileName):
+    RMSvector = adjustmentErrorNMEA(posFile,fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0
+    for coord in RMSvector:
+        squareSumLat += (coord[3])**2
+        squareSumLon += (coord[4])**2
+        squareSumH += (coord[5])**2
+    RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
+    RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
+    RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
+    result = (RMSLat,RMSLon,RMSH)
+    print result
+    print len(RMSvector)
+    return result
+
+def rmsPOS(fileName):
+    RMSvector = errorPOSsmartphone(fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0
+    for coord in RMSvector:
+        squareSumLat += (coord[3])**2
+        squareSumLon += (coord[4])**2
+        squareSumH += (coord[5])**2
+    RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
+    RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
+    RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
+    result = (RMSLat,RMSLon,RMSH)
+    print result
+    print len(RMSvector)
+    return result
+
+def sdNMEA(fileName):
+    avg = averageNMEA(fileName)
+    nmeaError = errorNMEA(fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0    
+    for coord in nmeaError:
+        squareSumLat += (coord[3]-avg[0])**2
+        squareSumLon += (coord[4]-avg[1])**2
+        squareSumH += (coord[5]-avg[2])**2
+    sdLat = math.sqrt(squareSumLat/len(nmeaError))
+    sdLon = math.sqrt(squareSumLon/len(nmeaError))
+    sdH = math.sqrt(squareSumH/len(nmeaError))
+    result = (sdLat,sdLon,sdH)
+    print result
+    return result
+
+def sdPOS(fileName):
+    avg = averagePOS(fileName)
+    nmeaError = errorPOSsmartphone(fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0    
+    for coord in nmeaError:
+        squareSumLat += (coord[3]-avg[0])**2
+        squareSumLon += (coord[4]-avg[1])**2
+        squareSumH += (coord[5]-avg[2])**2
+    sdLat = math.sqrt(squareSumLat/len(nmeaError))
+    sdLon = math.sqrt(squareSumLon/len(nmeaError))
+    sdH = math.sqrt(squareSumH/len(nmeaError))
+    result = (sdLat,sdLon,sdH)
+    print result
+    return result
+"""
+PLOTTING RESULTS
+
+Either graphs or output to excel spreadsheets
+"""
+def createExcel(fileName,data):    
+    cutfileName = fileName.split('.')
+    excelfileName = cutfileName[0] + '.xlsx'
+    workbook = xlsxwriter.Workbook(excelfileName)
+    worksheet = workbook.add_worksheet()
+    
+    row = 0
+    col = 0
+    worksheet.write(row, col, 'HH')
+    worksheet.write(row, col+1, 'MM')
+    worksheet.write(row, col+2, 'SS')
+    worksheet.write(row, col+3, 'Erro Latitude (m)')
+    worksheet.write(row, col+4, 'Erro Longitude (m)')
+    worksheet.write(row, col+5, 'Erro Altitude (m)')
+    worksheet.write(row, col+6, 'HHMMSS')
+    worksheet.write(row, col+7, 'Total de Satelites')
+    worksheet.write(row, col+8, 'GPS')
+    worksheet.write(row, col+9, 'GLONASS')
+    worksheet.write(row, col+10, 'BEIDOU')
+    worksheet.write(row, col+11, 'GALILEO')
+    row += 1
+    for epoch in data:
+        col = 0
+        for item in epoch:
+            worksheet.write(row, col, item)
+            col += 1
+        time = (epoch[0]*10000 + epoch[1]*100 + epoch[2])
+        worksheet.write(row, col, time)
+        row += 1
+        
+    workbook.close()
+    
+#    
+#rmsNMEA('20190115.txt')
+#rmsPOS('20190115_Sta91500.pos')
+#rmsPOS('20190115_Sta91500_Smoothed.pos')
+#print
+#rmsNMEA('20190211.txt')
+#rmsPOS('20190211_Sta91500.pos')
+#rmsPOS('20190211_Sta91500_Smoothed.pos')
+#print
+#rmsNMEA('20190212.txt')
+#rmsPOS('20190212_Sta91500.pos')
+#rmsPOS('20190212_Sta91500_Smoothed.pos')
+
+createExcel('20190115.txt',errorNMEA('20190115.txt'))
+createExcel('20190115_Sta91500.pos',errorPOSriod('20190115_Sta91500.pos'))
+createExcel('20190115_Sta91500_Smoothed.pos',errorPOSriod('20190115_Sta91500_Smoothed.pos'))
+
+createExcel('20190211.txt',errorNMEA('20190211.txt'))
+createExcel('20190211_Sta91500.pos',errorPOSriod('20190211_Sta91500.pos'))
+createExcel('20190211_Sta91500_Smoothed.pos',errorPOSriod('20190211_Sta91500_Smoothed.pos'))
+
+createExcel('20190211.txt',errorNMEA('20190211.txt'))
+createExcel('20190212_Sta91500.pos',errorPOSriod('20190212_Sta91500.pos'))
+createExcel('20190212_Sta91500_Smoothed.pos',errorPOSriod('20190212_Sta91500_Smoothed.pos'))
+#rmsNMEA('20190115.txt')
+#rmsPOS('20190115_Sta91500.pos')
+#rmsPOS('20190115_Sta91500_Smoothed.pos')
+#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
+#createExcel('riod0151.pos',errorPOSriod('riod0151.pos'))
+#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
+
+#createExcel('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos',errorPOSsmartphone('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos'))
+#createExcel('20190115_092503.txt',errorNMEA('20190115_092503.txt'))
+#fileName = 'SmoothingDebug.19o'
+#fileName = '20190115_LevantamentoCompleto.19o'
+#fileName = '1_minute.19o'
+#createExcel('20190211.txt',errorNMEA('20190211.txt'))
+#createExcel('20190212.txt',errorNMEA('20190212.txt'))
+#smoothRINEX('14_1.19o')
+#smoothRINEX('14_2.19o')
+#smoothRINEX('14_3.19o')
+
+#print
+#rmsPOS('14_1_GPS.pos')
+#sdPOS('14_1_GPS.pos')
+#print
+#rmsPOS('14_1_GG.pos')
+#print
+#rmsPOS('14_1_Smoothed_2.pos')
+#sdPOS('14_1_Smoothed_2.pos')
+#print
+#rmsNMEA('14_2.txt')
+#rmsPOS('14_2_GPS.pos')
+#rmsPOS('14_2_GG.pos')
+#print
+#rmsNMEA('14_3.txt')
+#rmsPOS('14_3_GPS.pos')
+#rmsPOS('14_3_GG.pos')
+#print
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print 'RMS NMEA'
+#rmsNMEA('20190115_092503.txt')
+#
+#print 'RMS NMEA'
+#rmsNMEA('20190211.txt')
+#print
+#sdNMEA('20190211.txt')
+#print
+#print 'RMS NMEA'
+#rmsNMEA('20190212.txt')
+#print
+#sdNMEA('20190212.txt')
+#print 'RMS NMEA'
+#rmsNMEA('20190115_092503.txt')
+#print
+#print'RMS POS Completo Static ON'
+#rmsPOS('20190115_LevantamentoCompleto_Static.pos')
+#print
+#print'RMS POS Completo Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS Completo GPS Smooth Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print
+#print'RMS POS Completo GPS Smooth Iono+Tropo ON using doppler average'
+#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GPS.pos')
+#print
+#print'RMS POS Completo GPS+GLONASS Smooth Iono+Tropo ON using doppler average'
+#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GG.pos')
+#print
+"""
+print rmsNMEA()
+print 'RMS NMEA 4min'
+rmsNMEA('4min.txt')
+print
+print 'RMS NMEA'
+rmsNMEA('20190115_092503.txt')
+print
+print 'RMS Adjusted NMEA'
+rmsAdjNMEA('filteredRinex_Debug.pos','20190115_092503.txt')
+print
+#print
+#print'RMS POS Completo Iono+Tropo OFF'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off.pos')
+#print
+#print'RMS POS Completo Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS Completo RAIM e Iono+Tropo OFF'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_RAIM.pos')
+#print
+#print'RMS POS Completo RAIM e Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_RAIM.pos')
+#print
+
+
+print
+print'RMS POS Completo Smooth Iono+Tropo Off'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono On Tropo Off'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_Off_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono Off Tropo On'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_On_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono+Tropo ON'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+print
+
+print'RMS POS Completo Static ON'
+rmsPOS('20190115_LevantamentoCompleto_Static.pos')
+print
+#print 'Average Error POS Smooth ON'
+#averagePOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS dia 14'
+#rmsPOS('IBGE014Q_Static.pos')
+#print
+#
+#print 'Standard Deviation NMEA'
+#sdNMEA('20190115_092503.txt')
+#print
+
+#
+#
+#print 'Standard Deviation POS original'
+#sdPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
+#print
+#print 'RMS POS OFF'
+#rmsPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
+#print
+
+
+print'Standard Deviation POS OFF'
+sdPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
+print
+
+print 'Standard Deviation POS Broad and Saas'
+sdPOS('20190115_LevantamentoCompleto.pos')
+print
+
+
+print 'RMS POS OFF'
+rmsPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
+print
+
+print 'RMS POS Broad and Saas'
+rmsPOS('20190115_LevantamentoCompleto.pos')
+print
+
+print 'Average Error NMEA'
+averageNMEA('20190115_092503.txt')
+print
+
+print 'Average Error POS OFF'
+averagePOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
+print
+
+print 'Average Error POS Broad and Saas'
+averagePOS('20190115_LevantamentoCompleto.pos')
+print
+
+#averagePOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
+#createExcel('20190117_064503.txt',errorNMEA('20190117_064503.txt'))
+#createExcel('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos',errorPOSsmartphone('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos'))
+#createExcel('ErrorNMEA',adjustmentErrorNMEA('filteredRinex20_G_Debugg_XYZ.pos','02_20170824135855.txt'))
+#createExcelerrorNMEA('02_20170824135855.txt')
+#print deg2xyz(-22.895700560001078, -43.22433159713865, 35.63634614087641)
+"""

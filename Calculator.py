@@ -3,7 +3,7 @@
 import math
 import matplotlib.pyplot as plt
 import xlsxwriter
-from datetime import datetime, timedelta
+from datetime import datetime
 import inspect
 from numbers import Number
 
@@ -21,6 +21,25 @@ Zonrj = -2466096.8361
 Xriod = 4280294.8786
 Yriod = -4034431.2247 
 Zriod = -2458141.3800
+
+"""
+360-(316+41/60.0+37.4/3600)
+-43.3062777778
+
+-22+49/60.0+4.2/3600
+Out[3]: -21.182166666666667
+
+22+49/60.0+4.2/3600
+Out[4]: 22.817833333333333
+
+Dados adquiridos do site: ftp://ftp.sirgas.org/pub/gps/SIRGAS/
+para as semanas 2036 e 2040
+
+(-1.2283013544738297, 0.13083121888820887)"""
+
+Xriod2019 = 4280294.89778
+Yriod2019 = -4034431.33971
+Zriod2019 = -2458141.16186
 
 """"
 MATH FUNCTIONS:
@@ -79,44 +98,33 @@ def radianError(phi1,lamb1,phi2,lamb2): #VALIDADO
     Ssimples = M * (phi2-phi1)
     
     S = a*(1-e2)*(phiA - phiB + phiC - phiD + phiE - phiF) #Comrpimento de arco de Meridiano
-    L = N*math.cos(phiAvg)*(lamb2-lamb1)#Comprimento de arco de Paralelo
+    L = N*math.cos(phiAvg)*(lamb1-lamb2)#Comprimento de arco de Paralelo
 
     result = (S,L)
 
     return result
+
+LatLonriod = xyz2deg(Xriod,Yriod,Zriod)
+LatLonriod2019 = xyz2deg(Xriod2019,Yriod2019,Zriod2019)
+XYZmarco = deg2xyz(LatMarco,LonMarco,hMarco)
+
+print radianError(LatLonriod2019[0],LatLonriod2019[1],LatLonriod[0],LatLonriod[1])
+
+deltaX = Xriod2019-Xriod
+deltaY = Yriod2019-Yriod
+deltaZ = Zriod2019-Zriod
+
+Xmarco2019 = XYZmarco[0] + deltaX
+Ymarco2019 = XYZmarco[1] + deltaY
+Zmarco2019 = XYZmarco[2] + deltaZ
+
+LatLonMarco2019 = xyz2deg(Xmarco2019,Ymarco2019,Zmarco2019)
+
+
 """
 SUPPORT FUNCTIONS:
 getRinexTime
 """
-
-def getRinexTime(line):
-    hour = int(line[10:12])
-    minute = int(line[13:15])
-    second = int(round(float(line[16:21])))
-    return datetime(1, 1, 1, hour, minute, second)
-
-def getSatellites(line):
-    result = []
-    for i in range(0, len(line)/3): # Loops in bundles of 3 due to GXX RXX satellite number format
-        c = line[i*3] # G for GPS and R for GLONASS
-        d = line[i*3+1] # Tenths
-        u = line[i*3+2] # Units
-        result.append(c+d+u)
-        result.append(0)
-    return result
-
-def smoothRange(measuredRange,lastsmoothedRange,doppler,weight):
-    l1length = 299792458.0/1575420000
-    deltaW = 0.05 # how much weight is added to each epoch
-    Wrange = 1 - weight*deltaW # reduces weight for measured range
-    if Wrange < 0.01:
-        Wrange = 0.01 # minimum weight is 1%
-    
-    Wdoppler = 0 + weight*deltaW # increases weight for smoothed range
-    if Wdoppler > 0.99:
-        Wdoppler = 0.99 # maximum weight is 99%
-    result = Wrange*measuredRange + Wdoppler * (lastsmoothedRange-doppler*l1length) #formula for doppler smoothing
-    return result
 
 """
 FILE READING FUNCTIONS:
@@ -173,7 +181,8 @@ def readNMEA(fileName):
                 if fixType in [2, 3]:
                     satellites += [int(x) for x in dataArray[3:15] if x is not ''] # Add observed satellite numbers
                     satBD = len(satellites) - satGPS - satGL
-                    nlines += 1 # Looks at second line of observed satellites
+                    nlines += 1 # Looks at second line of observed satellites:
+                    
                     
             if searchSat and sentenceId == "GAGSA": # Searching for Beidou satellites in fix
                 fixType = int(dataArray[2]) # Checks if fix exists
@@ -192,111 +201,6 @@ def readNMEA(fileName):
         nmeaFile.close()
     return result
 
-fileName = '20190115_Levantamento_8min.19o'
-output = '20190115_Levantamento_8min_Smoothed.19o'
-def smoothRINEX(fileName,output):
-    result = []
-    epochsat = []
-    out = []
-    onHeader = True
-    currTime = None
-    searchTime = True
-    ignoreLines = 0
-    extendLines = 0
-    numSat = 0
-    tuc = 0
-    sat = []
-    obs = []
-    epochlist = []
-    epochnum = 0
-    with open(fileName, 'r') as rinexFile:
-        for line in rinexFile:
-            if onHeader: # Keeps Header and gets leap seconds
-                out.append(line)
-                if "LEAP SECONDS" in line:
-                    tuc = int(line[0:6]) # Gets Leap seconds
-                if "END OF HEADER" in line:
-                    onHeader = False
-            else: # Start reading epochs
-                if searchTime:
-                    if ignoreLines == 0:
-                        out.append(line)
-    #                        currTime = getRinexTime(line)
-                        numSat = int(line[29:32]) # Number of satellites in epoch
-                        extendLines =  (numSat - 1) / 12 # Check if epoch has more than 1 line of observed satellites
-                        sat = getSatellites(line[32:]) # List satellites with timestamp for this epoch
-                        searchTime = False # Start reading each satellite observation
-                        countSat = 0
-                    else:
-                        ignoreLines -= 1 # Counts down lines that need to be skipped
-                        continue
-                    if searchTime == False and extendLines == 0:
-                        epoch = (epochnum,sat) # Start epoch list with satellites
-                        epochsat.append(epoch) 
-                    if searchTime == False and extendLines > 0:
-                        extendLines -= 1
-                        sat = sat + getSatellites(line[32:]) # concatenates second satellite line to first
-                        epoch = (epochnum,sat)
-                        epochsat.append(epoch)
-                else: # Start reading each satellite observation
-                    pseudorange = float(line[0:14]) # Reads measured pseudorange
-                    doppler = float(line[52:62]) # reads measured doppler
-                    if epochnum == 0: # stores first epoch measurements
-                        measurement = (pseudorange,doppler) # creates first measurement epoch
-                        obs.append(measurement)
-                        out.append(line) # output for rinexfile format
-                    if epochnum != 0: # reads all other epochs
-                        for i in range(0,len(epochlist[epochnum-1][1]),2): # loops satellite list to read satellite number
-                            if len(sat) == len(epochlist[epochnum-1][1]): 
-                                if sat[len(sat)-numSat*2] == epochlist[epochnum-1][1][i]: # If satellite exists last epoch
-                                    sat[len(sat)-numSat*2+1] = epochlist[epochnum-1][1][i+1]+1
-                                    lastsmoothedRange = epochlist[epochnum-1][2][i/2][0] # grabs last epoch range
-                                    weight = sat[len(sat)-numSat*2+1] # adds weight to this satellite
-                                    newRange = smoothRange(pseudorange,lastsmoothedRange,doppler,weight)# calculates smoothed range
-                                    measurement = (newRange,doppler)
-                                    obs.append(measurement)
-                                    newRangeline = '  ' + str(format(newRange,'.3f')) + line[14:62] + '\n'
-                                    out.append(newRangeline)
-    #                            check = epochlist[epochnum-1][1].count(sat[i])
-    #                            if check == 0:
-    #                                measurement = (pseudorange,doppler)
-    #                                obs.append(measurement)
-    #                                out.append(line)
-    #                        else:
-    #                            dif =  len(epochlist[epochnum-1][1]) - len(sat)
-    #                            check = epochlist[epochnum-1][1].count(sat[i])
-                                
-                                
-    #                        else:
-    #                            measurement = (newRange,doppler)
-    #                            obs.append(measurement)
-                                
-    #                print sat[len(sat)-numSat*2+1]
-                    numSat -= 1
-                            
-                    if numSat == 0: # END OF EPOCH: Finished reading all satellites
-                        savetolist = (epochnum,sat,obs)
-    #                    print savetolist
-                        epochlist.append(savetolist)
-                        print 'end of epoch ',epochnum
-                        searchTime = True # Read new epoch
-                        epochnum +=1
-                        obs = []
-        rinexFile.close()
-#with open(output, 'w') as outputFile:
-#    for line in out:
-#        outputFile.write(line)
-#    outputFile.close()
-
-#readRINEX(fileName,output)
-    
-"""
-epochlist:
-For satellites:
-    epochlist[epochnum][1][each index is one sat]
-For measurments:
-    epochlist[epochnum][2][0=pseudorange 1=doppler]
-"""            
 #return result
 
 
@@ -346,9 +250,9 @@ def errorNMEA(nmeafileName):
     nmea = nmea2deg(nmeafileName)
     sat = readNMEA(nmeafileName)
     for coord in nmea:
-        error = radianError(LatMarco,LonMarco,coord[3],coord[4])
+        error = radianError(LatLonMarco2019[0],LatLonMarco2019[1],coord[3],coord[4])
         herror = coord[5] - hMarco
-        epoch = (coord[0], coord[1], coord[2], error[0], error[1], herror,coord[6])
+        epoch = (coord[0], coord[1], coord[2], error[0], error[1], herror)
         result.append( epoch )
     return result
 
@@ -379,14 +283,15 @@ def pos2xyz(fileName):
         posFile.close()
     return result
 
+#latriod2019,lonriod2019
 def errorPOSriod(fileName):
     result = []
-    DDriod = xyz2deg(Xriod,Yriod,Zriod)
+    DDriod2019 = xyz2deg(Xriod2019,Yriod2019,Zriod2019)
     XYZpos = pos2xyz(fileName)
     for coord in XYZpos:
         DDpos = xyz2deg(coord[3],coord[4],coord[5])
-        LatLonError = radianError(DDriod[0],DDriod[1],DDpos[0],DDpos[1])
-        herror = DDpos[2] - DDriod[2]
+        LatLonError = radianError(DDriod2019[0],DDriod2019[1],DDpos[0],DDpos[1])
+        herror = DDpos[2] - DDriod2019[2]
         
         epoch = (coord[0], coord[1], coord[2], LatLonError[0], LatLonError[1], herror)
         result.append( epoch )
@@ -397,7 +302,7 @@ def errorPOSsmartphone(fileName):
     XYZpos = pos2xyz(fileName)
     for coord in XYZpos:
         DDpos = xyz2deg(coord[3],coord[4],coord[5])
-        LatLonError = radianError(LatMarco,LonMarco,DDpos[0],DDpos[1])
+        LatLonError = radianError(LatLonMarco2019[0],LatLonMarco2019[1],DDpos[0],DDpos[1])
         herror = DDpos[2] - hMarco
         
         epoch = (coord[0], coord[1], coord[2], LatLonError[0], LatLonError[1], herror)
@@ -428,9 +333,9 @@ def adjustmentNMEA(posFile,nmeafileName):
                 hTime = coord[0]
                 mTime = coord[1]
                 sTime = coord[2]                
-                Xerror = pos[3] - Xonrj
-                Yerror = pos[4] - Yonrj
-                Zerror = pos[5] - Zonrj
+                Xerror = pos[3] - Xriod
+                Yerror = pos[4] - Yriod
+                Zerror = pos[5] - Zriod
                 
                 Xadjusted = coord[3] - Xerror
                 Yadjusted = coord[4] - Yerror
@@ -444,7 +349,7 @@ def adjustmentErrorNMEA(posFile,nmeafileName):
     result = []
     nmea = adjustmentNMEA(posFile,nmeafileName)
     for coord in nmea:
-        error = radianError(LatMarco,LonMarco,coord[3],coord[4])
+        error = radianError(LatLonMarco2019[0],LatLonMarco2019[1],coord[3],coord[4])
         herror = coord[5] - hMarco
         epoch = (coord[0], coord[1], coord[2], error[0], error[1], herror)
         result.append( epoch )
@@ -466,10 +371,7 @@ def averageNMEA(fileName):
     averageLat = sumLat/len(nmeaCoords)
     averageLon = sumLon/len(nmeaCoords)
     averageH = sumH/len(nmeaCoords)
-#    print averageLat
-#    print averageLon
-#    print averageH
-    avgError = radianError(LatMarco,LonMarco,averageLat,averageLon)
+    avgError = radianError(LatLonMarco2019[0],LatLonMarco2019[1],averageLat,averageLon)
     avgHerror = averageH - hMarco
     result = (avgError[0],avgError[1],avgHerror)
     print result
@@ -490,15 +392,14 @@ def averagePOS(fileName):
     averageLat = sumLat/len(XYZpos)
     averageLon = sumLon/len(XYZpos)
     averageH = sumH/len(XYZpos)
-#    print averageLat
-#    print averageLon
-#    print averageH
-    avgError = radianError(LatMarco,LonMarco,averageLat,averageLon)
+    avgError = radianError(LatLonMarco2019[0],LatLonMarco2019[1],averageLat,averageLon)
     avgHerror = averageH - hMarco
     result = (avgError[0],avgError[1],avgHerror)
     print result
     return result
-    
+
+
+
 def rmsNMEA(fileName):
     RMSvector = errorNMEA(fileName)
     squareSumLat = 0
@@ -511,11 +412,26 @@ def rmsNMEA(fileName):
     RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
     RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
     RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
-#    print RMSLat
-#    print RMSLon
-#    print RMSH
     result = (RMSLat,RMSLon,RMSH)
     print result
+    print len(RMSvector)
+    return result
+
+def rmsAdjNMEA(posFile,fileName):
+    RMSvector = adjustmentErrorNMEA(posFile,fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0
+    for coord in RMSvector:
+        squareSumLat += (coord[3])**2
+        squareSumLon += (coord[4])**2
+        squareSumH += (coord[5])**2
+    RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
+    RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
+    RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
+    result = (RMSLat,RMSLon,RMSH)
+    print result
+    print len(RMSvector)
     return result
 
 def rmsPOS(fileName):
@@ -530,12 +446,28 @@ def rmsPOS(fileName):
     RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
     RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
     RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
-#    print RMSLat
-#    print RMSLon
-#    print RMSH
     result = (RMSLat,RMSLon,RMSH)
     print result
+    print len(RMSvector)
     return result
+
+def rmsRIOD(fileName):
+    RMSvector = errorPOSriod(fileName)
+    squareSumLat = 0
+    squareSumLon = 0
+    squareSumH = 0
+    for coord in RMSvector:
+        squareSumLat += (coord[3])**2
+        squareSumLon += (coord[4])**2
+        squareSumH += (coord[5])**2
+    RMSLat = math.sqrt((squareSumLat)/(len(RMSvector)-1))
+    RMSLon = math.sqrt((squareSumLon)/(len(RMSvector)-1))
+    RMSH = math.sqrt((squareSumH)/(len(RMSvector)-1))
+    result = (RMSLat,RMSLon,RMSH)
+    print result
+    print len(RMSvector)
+    return result
+
 
 def sdNMEA(fileName):
     avg = averageNMEA(fileName)
@@ -550,9 +482,6 @@ def sdNMEA(fileName):
     sdLat = math.sqrt(squareSumLat/len(nmeaError))
     sdLon = math.sqrt(squareSumLon/len(nmeaError))
     sdH = math.sqrt(squareSumH/len(nmeaError))
-#    print sdLat
-#    print sdLon
-#    print sdH
     result = (sdLat,sdLon,sdH)
     print result
     return result
@@ -570,9 +499,6 @@ def sdPOS(fileName):
     sdLat = math.sqrt(squareSumLat/len(nmeaError))
     sdLon = math.sqrt(squareSumLon/len(nmeaError))
     sdH = math.sqrt(squareSumH/len(nmeaError))
-#    print sdLat
-#    print sdLon
-#    print sdH
     result = (sdLat,sdLon,sdH)
     print result
     return result
@@ -586,7 +512,8 @@ def createExcel(fileName,data):
     excelfileName = cutfileName[0] + '.xlsx'
     workbook = xlsxwriter.Workbook(excelfileName)
     worksheet = workbook.add_worksheet()
-    
+    date_format_type = 'hh:mm:ss'
+    date_format = workbook.add_format({'num_format': date_format_type,'align': 'left'})
     row = 0
     col = 0
     worksheet.write(row, col, 'HH')
@@ -597,39 +524,281 @@ def createExcel(fileName,data):
     worksheet.write(row, col+5, 'Erro Altitude (m)')
     worksheet.write(row, col+6, 'HHMMSS')
     worksheet.write(row, col+7, 'Total de Satelites')
-    worksheet.write(row, col+8, 'GPS')
-    worksheet.write(row, col+9, 'GLONASS')
-    worksheet.write(row, col+10, 'BEIDOU')
-    worksheet.write(row, col+11, 'GALILEO')
     row += 1
     for epoch in data:
         col = 0
         for item in epoch:
             worksheet.write(row, col, item)
             col += 1
-        time = (epoch[0]*10000 + epoch[1]*100 + epoch[2])
-        worksheet.write(row, col, time)
+#        time = str(epoch[0]) + ':' + str(epoch[1]) + ':' + str(epoch[2])
+#        ymdtime = '0001-01-01 ' + time
+#        date_time = datetime.strptime(ymdtime, '%Y-%m-%d %H:%M:%S')
+        time = datetime(2019, 1, 1, epoch[0], epoch[1], epoch[2])
+        worksheet.write_datetime(row, col, time, date_format)
         row += 1
         
     workbook.close()
 
-#createExcel('20190115_Levantamento_8min_Smooth_GPS.pos',errorPOSsmartphone('20190115_Levantamento_8min_Smooth_GPS.pos'))
 
-print'Standard Deviation POS'
-sdPOS('20190115_Levantamento_8min_Smooth_GPS_IonoTropoOn.pos')
-print
-print'RMS POS'
-rmsPOS('20190115_Levantamento_8min_Smooth_GPS_IonoTropoOn.pos')
-print
+#createExcel('riod0431_semifiltrado.pos',errorPOSriod('riod0431_semifiltrado.pos'))
 
-print 'Standard Deviation NMEA'
-sdNMEA('20190115_092503.txt')
+rmsPOS('20190115_Sta91500.pos')
+rmsPOS('20190115_Sta91500_DGNSS.pos')
+rmsPOS('20190115_Sta91500_Smoothed.pos')
+rmsPOS('20190115_Sta91500_Smoothed_DGNSS.pos')
 print
+rmsPOS('20190211_Sta91500.pos')
+rmsPOS('20190211_Sta91500_DGNSS.pos')
+rmsPOS('20190211_Sta91500_Smoothed.pos')
+rmsPOS('20190211_Sta91500_Smoothed_DGNSS.pos')
+print
+rmsPOS('20190212_Sta91500.pos')
+rmsPOS('20190212_Sta91500_DGNSS.pos')
+rmsPOS('20190212_Sta91500_Smoothed.pos')
+rmsPOS('20190212_Sta91500_Smoothed_DGNSS.pos')
 
+"""
+#1) DGNSS posição
+rmsRIOD('riod0151_semifiltrado.pos')
+rmsNMEA('20190115.txt') 
+rmsRIOD('riod0421_semifiltrado.pos')  
+rmsNMEA('20190211.txt')   
+rmsRIOD('riod0431_semifiltrado.pos')
+rmsNMEA('20190212.txt')
+
+#2) DGNSS observação
+rmsPOS('20190115_Sta91500.pos')
+rmsPOS('20190115_Sta91500_DGNSS.pos')
+rmsPOS('20190115_Sta91500_Smoothed.pos')
+rmsPOS('20190115_Sta91500_Smoothed_DGNSS.pos')
+print
+rmsPOS('20190211_Sta91500.pos')
+rmsPOS('20190211_Sta91500_DGNSS.pos')
+rmsPOS('20190211_Sta91500_Smoothed.pos')
+rmsPOS('20190211_Sta91500_Smoothed_DGNSS.pos')
+print
+rmsPOS('20190212_Sta91500.pos')
+rmsPOS('20190212_Sta91500_DGNSS.pos')
+rmsPOS('20190212_Sta91500_Smoothed.pos')
+rmsPOS('20190212_Sta91500_Smoothed_DGNSS.pos')
+
+
+#3.2) SSP Com ajuste Sirgas2019
+rmsNMEA('20190115.txt')
+rmsPOS('20190115_Sta91500.pos')
+rmsPOS('20190115_Sta91500_Smoothed.pos')
+rmsPOS('20190115_Sta91500_Smoothed5sec.pos')
+rmsPOS('20190115_Sta91500doppleravg_Smoothed.pos')
+print
+rmsNMEA('20190211.txt')
+rmsPOS('20190211_Sta91500.pos')
+rmsPOS('20190211_Sta91500_Smoothed.pos')
+rmsPOS('20190211_Sta91500_Smoothed5sec.pos')
+rmsPOS('20190211_Sta91500doppleravg_Smoothed.pos')
+print
+rmsNMEA('20190212.txt')
+rmsPOS('20190212_Sta91500.pos')
+rmsPOS('20190212_Sta91500_Smoothed.pos')
+rmsPOS('20190212_Sta91500_Smoothed5sec.pos')
+rmsPOS('20190212_Sta91500doppleravg_Smoothed.pos')
+
+#4) Static
+rmsPOS('20190115_Sta91500.pos')
+rmsPOS('20190115_Sta91500_Static.pos')
+rmsPOS('20190115_Sta91500_Smoothed_Static.pos')
+print
+rmsPOS('20190211_Sta91500.pos')
+rmsPOS('20190211_Sta91500_Static.pos')
+rmsPOS('20190211_Sta91500_Smoothed_Static.pos')
+print
+rmsPOS('20190212_Sta91500.pos')
+rmsPOS('20190212_Sta91500_Static.pos')
+rmsPOS('20190212_Sta91500_Smoothed_Static.pos')
+
+"""
+
+
+#createExcel('20190115.txt',errorNMEA('20190115.txt'))
+#createExcel('riod0151_semifiltrado.pos',errorPOSriod('riod0151_semifiltrado.pos'))
+#createExcel('20190115_Sta91500.pos',errorPOSsmartphone('20190115_Sta91500.pos'))
+createExcel('20190115_Sta91500_DGNSS.pos',errorPOSsmartphone('20190115_Sta91500_DGNSS.pos'))
+createExcel('20190115_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_DGNSS.pos'))
+#createExcel('20190115_Sta91500_Smoothed.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed.pos'))
+#createExcel('20190115_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed5sec.pos'))
+#createExcel('20190115_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190115_Sta91500doppleravg_Smoothed.pos'))
+#createExcel('20190115_Sta91500_Static.pos',errorPOSsmartphone('20190115_Sta91500_Static.pos'))
+#createExcel('20190115_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_Static.pos'))
+#print
+#createExcel('20190211.txt',errorNMEA('20190211.txt'))
+#createExcel('riod0421_semifiltrado.pos',errorPOSriod('riod0421_semifiltrado.pos'))
+#createExcel('20190211_Sta91500.pos',errorPOSsmartphone('20190211_Sta91500.pos'))
+createExcel('20190211_Sta91500_DGNSS.pos',errorPOSsmartphone('20190211_Sta91500_DGNSS.pos'))
+createExcel('20190211_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed_DGNSS.pos'))
+#createExcel('20190211_Sta91500_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed.pos'))
+#createExcel('20190211_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed5sec.pos'))
+#createExcel('20190211_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500doppleravg_Smoothed.pos'))
+#createExcel('20190211_Sta91500_Static.pos',errorPOSsmartphone('20190211_Sta91500_Static.pos'))
+#createExcel('20190211_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed_Static.pos'))
+#print
+#createExcel('20190212.txt',errorNMEA('20190212.txt'))
+#createExcel('riod0431_semifiltrado.pos',errorPOSriod('riod0431_semifiltrado.pos'))
+#createExcel('20190212_Sta91500.pos',errorPOSsmartphone('20190212_Sta91500.pos'))
+createExcel('20190212_Sta91500_DGNSS.pos',errorPOSsmartphone('20190212_Sta91500_DGNSS.pos'))
+createExcel('20190212_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_DGNSS.pos'))
+#createExcel('20190212_Sta91500_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed.pos'))
+#createExcel('20190212_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed5sec.pos'))
+#createExcel('20190212_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500doppleravg_Smoothed.pos'))
+#createExcel('20190212_Sta91500_Static.pos',errorPOSsmartphone('20190212_Sta91500_Static.pos'))
+#createExcel('20190212_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_Static.pos'))
+#createExcel('20190212_Sta91500_Smoothed_OFF.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_OFF.pos'))
+
+#
+#createExcel('20190211.txt',errorNMEA('20190211.txt'))
+#createExcel('20190211_Sta91500.pos',errorPOSsmartphone('20190211_Sta91500.pos'))
+#createExcel('20190211_Sta91500_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed.pos'))
+
+#createExcel('20190212.txt',errorNMEA('20190212.txt'))
+#createExcel('20190212_Sta91500.pos',errorPOSsmartphone('20190212_Sta91500.pos'))
+#createExcel('20190212_Sta91500_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed.pos'))
+#createExcel('20190212_Sta91500_RAIM.pos',errorPOSsmartphone('20190212_Sta91500_RAIM.pos'))
+
+
+#createExcel('20190115_Sta91500_Smoothed_OFF.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_OFF.pos'))
+#rmsNMEA('20190115.txt')
+#rmsPOS('20190115_Sta91500.pos')
+#print
+#rmsPOS('20190115_Sta91500_Smoothed.pos')
+#rmsPOS('20190115_Sta91500_DGNSS.pos')
+#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
+#createExcel('riod0151.pos',errorPOSriod('riod0151.pos'))
+#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
+
+#createExcel('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos',errorPOSsmartphone('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos'))
+#createExcel('20190115_092503.txt',errorNMEA('20190115_092503.txt'))
+#fileName = 'SmoothingDebug.19o'
+#fileName = '20190115_LevantamentoCompleto.19o'
+#fileName = '1_minute.19o'
+#createExcel('20190211.txt',errorNMEA('20190211.txt'))
+#createExcel('20190212.txt',errorNMEA('20190212.txt'))
+#smoothRINEX('14_1.19o')
+#smoothRINEX('14_2.19o')
+#smoothRINEX('14_3.19o')
+
+#print
+#rmsPOS('14_1_GPS.pos')
+#sdPOS('14_1_GPS.pos')
+#print
+#rmsPOS('14_1_GG.pos')
+#print
+#rmsPOS('14_1_Smoothed_2.pos')
+#sdPOS('14_1_Smoothed_2.pos')
+#print
+#rmsNMEA('14_2.txt')
+#rmsPOS('14_2_GPS.pos')
+#rmsPOS('20190115_Sta91500_Smoothed_OFF.pos')
+#print
+#rmsNMEA('14_3.txt')
+#rmsPOS('14_3_GPS.pos')
+#rmsPOS('14_3_GG.pos')
+#print
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print 'RMS NMEA'
+#rmsNMEA('20190115_092503.txt')
+#
+#print 'RMS NMEA'
+#rmsNMEA('20190211.txt')
+#print
+#sdNMEA('20190211.txt')
+#print
+#print 'RMS NMEA'
+#rmsNMEA('20190212.txt')
+#print
+#sdNMEA('20190212.txt')
+#print 'RMS NMEA'
+#rmsNMEA('20190115_092503.txt')
+#print
+#print'RMS POS Completo Static ON'
+#rmsPOS('20190115_LevantamentoCompleto_Static.pos')
+#print
+#print'RMS POS Completo Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS Completo GPS Smooth Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print
+#print'RMS POS Completo GPS Smooth Iono+Tropo ON using doppler average'
+#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GPS.pos')
+#print
+#print'RMS POS Completo GPS+GLONASS Smooth Iono+Tropo ON using doppler average'
+#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GG.pos')
+#print
+"""
+print rmsNMEA()
+print 'RMS NMEA 4min'
+rmsNMEA('4min.txt')
+print
 print 'RMS NMEA'
 rmsNMEA('20190115_092503.txt')
 print
-"""
+print 'RMS Adjusted NMEA'
+rmsAdjNMEA('filteredRinex_Debug.pos','20190115_092503.txt')
+print
+#print
+#print'RMS POS Completo Iono+Tropo OFF'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off.pos')
+#print
+#print'RMS POS Completo Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS Completo RAIM e Iono+Tropo OFF'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_RAIM.pos')
+#print
+#print'RMS POS Completo RAIM e Iono+Tropo ON'
+#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_RAIM.pos')
+#print
+
+
+print
+print'RMS POS Completo Smooth Iono+Tropo Off'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono On Tropo Off'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_Off_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono Off Tropo On'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_On_Smooth.pos')
+print
+print'RMS POS Completo Smooth Iono+Tropo ON'
+rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+print
+
+print'RMS POS Completo Static ON'
+rmsPOS('20190115_LevantamentoCompleto_Static.pos')
+print
+#print 'Average Error POS Smooth ON'
+#averagePOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
+#print
+#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
+#print
+#print'RMS POS dia 14'
+#rmsPOS('IBGE014Q_Static.pos')
+#print
+#
+#print 'Standard Deviation NMEA'
+#sdNMEA('20190115_092503.txt')
+#print
+
+#
+#
+#print 'Standard Deviation POS original'
+#sdPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
+#print
+#print 'RMS POS OFF'
+#rmsPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
+#print
+
+
 print'Standard Deviation POS OFF'
 sdPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
 print
@@ -658,7 +827,6 @@ print
 print 'Average Error POS Broad and Saas'
 averagePOS('20190115_LevantamentoCompleto.pos')
 print
-"""
 
 #averagePOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
 #createExcel('20190117_064503.txt',errorNMEA('20190117_064503.txt'))
@@ -666,3 +834,4 @@ print
 #createExcel('ErrorNMEA',adjustmentErrorNMEA('filteredRinex20_G_Debugg_XYZ.pos','02_20170824135855.txt'))
 #createExcelerrorNMEA('02_20170824135855.txt')
 #print deg2xyz(-22.895700560001078, -43.22433159713865, 35.63634614087641)
+"""
