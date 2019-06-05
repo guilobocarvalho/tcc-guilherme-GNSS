@@ -1,13 +1,5 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
-"""
-Created on 2017 - 07 - 04
-
-Updated 2018 - 10 - 03
-
-@author: Irving Badolato
-"""
-
 import sys
 from datetime import datetime, timedelta
 
