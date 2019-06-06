@@ -542,20 +542,7 @@ def createExcel(fileName,data):
 
 #createExcel('riod0431_semifiltrado.pos',errorPOSriod('riod0431_semifiltrado.pos'))
 
-rmsPOS('20190115_Sta91500.pos')
-rmsPOS('20190115_Sta91500_DGNSS.pos')
-rmsPOS('20190115_Sta91500_Smoothed.pos')
-rmsPOS('20190115_Sta91500_Smoothed_DGNSS.pos')
-print
-rmsPOS('20190211_Sta91500.pos')
-rmsPOS('20190211_Sta91500_DGNSS.pos')
-rmsPOS('20190211_Sta91500_Smoothed.pos')
-rmsPOS('20190211_Sta91500_Smoothed_DGNSS.pos')
-print
-rmsPOS('20190212_Sta91500.pos')
-rmsPOS('20190212_Sta91500_DGNSS.pos')
-rmsPOS('20190212_Sta91500_Smoothed.pos')
-rmsPOS('20190212_Sta91500_Smoothed_DGNSS.pos')
+rmsNMEA('20190117_064503.txt')
 
 """
 #1) DGNSS posição
