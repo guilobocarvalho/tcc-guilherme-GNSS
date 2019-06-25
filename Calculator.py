@@ -13,6 +13,8 @@ e2 = (0.08181919104282)**2
 LatMarco = -(22 + 49/60.0 + 08.76793/3600)
 LonMarco = -(43 + 18/60.0 + 23.95193/3600)
 hMarco = -1.461
+print LatMarco 
+print LonMarco 
 
 Xonrj = 4283638.3579
 Yonrj = -4026028.8217
@@ -40,7 +42,6 @@ para as semanas 2036 e 2040
 Xriod2019 = 4280294.89778
 Yriod2019 = -4034431.33971
 Zriod2019 = -2458141.16186
-
 """"
 MATH FUNCTIONS:
 
@@ -120,18 +121,15 @@ Zmarco2019 = XYZmarco[2] + deltaZ
 
 LatLonMarco2019 = xyz2deg(Xmarco2019,Ymarco2019,Zmarco2019)
 
+print LatLonriod
+print LatLonriod2019
+print LatLonMarco2019
 
-"""
-SUPPORT FUNCTIONS:
-getRinexTime
-"""
-
+print radianError(LatLonriod2019[0],LatLonriod2019[1],LatLonMarco2019[0],LatLonMarco2019[1])
 """
 FILE READING FUNCTIONS:
     
 readNMEA
-readRINEX
-readPOS
 """
 
 def readNMEA(fileName):
@@ -357,7 +355,7 @@ def adjustmentErrorNMEA(posFile,nmeafileName):
 
 """
 Statistical calculations
-Calculates Averages, Root mean errors and standard deviation.
+Calculates Averages, Root Mean Square errors and standard deviation.
 """
 def averageNMEA(fileName):
     nmeaCoords = nmea2deg(fileName)
@@ -505,7 +503,7 @@ def sdPOS(fileName):
 """
 PLOTTING RESULTS
 
-Either graphs or output to excel spreadsheets
+Outputs to excel spreadsheets
 """
 def createExcel(fileName,data):    
     cutfileName = fileName.split('.')
@@ -538,11 +536,6 @@ def createExcel(fileName,data):
         row += 1
         
     workbook.close()
-
-
-#createExcel('riod0431_semifiltrado.pos',errorPOSriod('riod0431_semifiltrado.pos'))
-
-rmsNMEA('20190117_064503.txt')
 
 """
 #1) DGNSS posição
@@ -602,223 +595,35 @@ rmsPOS('20190212_Sta91500.pos')
 rmsPOS('20190212_Sta91500_Static.pos')
 rmsPOS('20190212_Sta91500_Smoothed_Static.pos')
 
-"""
-
-
+Excel Plots
+20190115 - January 15th 2019
 #createExcel('20190115.txt',errorNMEA('20190115.txt'))
 #createExcel('riod0151_semifiltrado.pos',errorPOSriod('riod0151_semifiltrado.pos'))
 #createExcel('20190115_Sta91500.pos',errorPOSsmartphone('20190115_Sta91500.pos'))
 createExcel('20190115_Sta91500_DGNSS.pos',errorPOSsmartphone('20190115_Sta91500_DGNSS.pos'))
-createExcel('20190115_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190115_Sta91500_Smoothed.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed.pos'))
+createExcel('20190115_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190115_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed5sec.pos'))
 #createExcel('20190115_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190115_Sta91500doppleravg_Smoothed.pos'))
-#createExcel('20190115_Sta91500_Static.pos',errorPOSsmartphone('20190115_Sta91500_Static.pos'))
-#createExcel('20190115_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_Static.pos'))
 #print
+
+201902111 - February 11th 2019
 #createExcel('20190211.txt',errorNMEA('20190211.txt'))
 #createExcel('riod0421_semifiltrado.pos',errorPOSriod('riod0421_semifiltrado.pos'))
 #createExcel('20190211_Sta91500.pos',errorPOSsmartphone('20190211_Sta91500.pos'))
 createExcel('20190211_Sta91500_DGNSS.pos',errorPOSsmartphone('20190211_Sta91500_DGNSS.pos'))
-createExcel('20190211_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190211_Sta91500_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed.pos'))
+createExcel('20190211_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190211_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed5sec.pos'))
 #createExcel('20190211_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500doppleravg_Smoothed.pos'))
-#createExcel('20190211_Sta91500_Static.pos',errorPOSsmartphone('20190211_Sta91500_Static.pos'))
-#createExcel('20190211_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed_Static.pos'))
 #print
+201902112 - February 12th 2019
 #createExcel('20190212.txt',errorNMEA('20190212.txt'))
 #createExcel('riod0431_semifiltrado.pos',errorPOSriod('riod0431_semifiltrado.pos'))
 #createExcel('20190212_Sta91500.pos',errorPOSsmartphone('20190212_Sta91500.pos'))
 createExcel('20190212_Sta91500_DGNSS.pos',errorPOSsmartphone('20190212_Sta91500_DGNSS.pos'))
-createExcel('20190212_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190212_Sta91500_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed.pos'))
+createExcel('20190212_Sta91500_Smoothed_DGNSS.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_DGNSS.pos'))
 #createExcel('20190212_Sta91500_Smoothed5sec.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed5sec.pos'))
 #createExcel('20190212_Sta91500doppleravg_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500doppleravg_Smoothed.pos'))
-#createExcel('20190212_Sta91500_Static.pos',errorPOSsmartphone('20190212_Sta91500_Static.pos'))
-#createExcel('20190212_Sta91500_Smoothed_Static.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_Static.pos'))
-#createExcel('20190212_Sta91500_Smoothed_OFF.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed_OFF.pos'))
-
-#
-#createExcel('20190211.txt',errorNMEA('20190211.txt'))
-#createExcel('20190211_Sta91500.pos',errorPOSsmartphone('20190211_Sta91500.pos'))
-#createExcel('20190211_Sta91500_Smoothed.pos',errorPOSsmartphone('20190211_Sta91500_Smoothed.pos'))
-
-#createExcel('20190212.txt',errorNMEA('20190212.txt'))
-#createExcel('20190212_Sta91500.pos',errorPOSsmartphone('20190212_Sta91500.pos'))
-#createExcel('20190212_Sta91500_Smoothed.pos',errorPOSsmartphone('20190212_Sta91500_Smoothed.pos'))
-#createExcel('20190212_Sta91500_RAIM.pos',errorPOSsmartphone('20190212_Sta91500_RAIM.pos'))
-
-
-#createExcel('20190115_Sta91500_Smoothed_OFF.pos',errorPOSsmartphone('20190115_Sta91500_Smoothed_OFF.pos'))
-#rmsNMEA('20190115.txt')
-#rmsPOS('20190115_Sta91500.pos')
-#print
-#rmsPOS('20190115_Sta91500_Smoothed.pos')
-#rmsPOS('20190115_Sta91500_DGNSS.pos')
-#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
-#createExcel('riod0151.pos',errorPOSriod('riod0151.pos'))
-#createExcel('riod0171_filtered.pos',errorPOSriod('riod0171_filtered.pos'))
-
-#createExcel('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos',errorPOSsmartphone('20190115_LevantamentoCompleto_Smoothed_GPS_IonoOnTropoOn.pos'))
-#createExcel('20190115_092503.txt',errorNMEA('20190115_092503.txt'))
-#fileName = 'SmoothingDebug.19o'
-#fileName = '20190115_LevantamentoCompleto.19o'
-#fileName = '1_minute.19o'
-#createExcel('20190211.txt',errorNMEA('20190211.txt'))
-#createExcel('20190212.txt',errorNMEA('20190212.txt'))
-#smoothRINEX('14_1.19o')
-#smoothRINEX('14_2.19o')
-#smoothRINEX('14_3.19o')
-
-#print
-#rmsPOS('14_1_GPS.pos')
-#sdPOS('14_1_GPS.pos')
-#print
-#rmsPOS('14_1_GG.pos')
-#print
-#rmsPOS('14_1_Smoothed_2.pos')
-#sdPOS('14_1_Smoothed_2.pos')
-#print
-#rmsNMEA('14_2.txt')
-#rmsPOS('14_2_GPS.pos')
-#rmsPOS('20190115_Sta91500_Smoothed_OFF.pos')
-#print
-#rmsNMEA('14_3.txt')
-#rmsPOS('14_3_GPS.pos')
-#rmsPOS('14_3_GG.pos')
-#print
-#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
-#print 'RMS NMEA'
-#rmsNMEA('20190115_092503.txt')
-#
-#print 'RMS NMEA'
-#rmsNMEA('20190211.txt')
-#print
-#sdNMEA('20190211.txt')
-#print
-#print 'RMS NMEA'
-#rmsNMEA('20190212.txt')
-#print
-#sdNMEA('20190212.txt')
-#print 'RMS NMEA'
-#rmsNMEA('20190115_092503.txt')
-#print
-#print'RMS POS Completo Static ON'
-#rmsPOS('20190115_LevantamentoCompleto_Static.pos')
-#print
-#print'RMS POS Completo Iono+Tropo ON'
-#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
-#print
-#print'RMS POS Completo GPS Smooth Iono+Tropo ON'
-#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
-#print
-#print'RMS POS Completo GPS Smooth Iono+Tropo ON using doppler average'
-#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GPS.pos')
-#print
-#print'RMS POS Completo GPS+GLONASS Smooth Iono+Tropo ON using doppler average'
-#rmsPOS('20190115_LevantamentoCompletodoppleravg_Smoothed_GG.pos')
-#print
-"""
-print rmsNMEA()
-print 'RMS NMEA 4min'
-rmsNMEA('4min.txt')
-print
-print 'RMS NMEA'
-rmsNMEA('20190115_092503.txt')
-print
-print 'RMS Adjusted NMEA'
-rmsAdjNMEA('filteredRinex_Debug.pos','20190115_092503.txt')
-print
-#print
-#print'RMS POS Completo Iono+Tropo OFF'
-rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off.pos')
-#print
-#print'RMS POS Completo Iono+Tropo ON'
-#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
-#print
-#print'RMS POS Completo RAIM e Iono+Tropo OFF'
-#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_RAIM.pos')
-#print
-#print'RMS POS Completo RAIM e Iono+Tropo ON'
-#rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_RAIM.pos')
-#print
-
-
-print
-print'RMS POS Completo Smooth Iono+Tropo Off'
-rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_Off_Smooth.pos')
-print
-print'RMS POS Completo Smooth Iono On Tropo Off'
-rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_Off_Smooth.pos')
-print
-print'RMS POS Completo Smooth Iono Off Tropo On'
-rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_Off_Tropo_On_Smooth.pos')
-print
-print'RMS POS Completo Smooth Iono+Tropo ON'
-rmsPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
-print
-
-print'RMS POS Completo Static ON'
-rmsPOS('20190115_LevantamentoCompleto_Static.pos')
-print
-#print 'Average Error POS Smooth ON'
-#averagePOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
-#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On_Smooth.pos')
-#print
-#sdPOS('20190115_LevantamentoCompleto_GPS_Iono_On_Tropo_On.pos')
-#print
-#print'RMS POS dia 14'
-#rmsPOS('IBGE014Q_Static.pos')
-#print
-#
-#print 'Standard Deviation NMEA'
-#sdNMEA('20190115_092503.txt')
-#print
-
-#
-#
-#print 'Standard Deviation POS original'
-#sdPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
-#print
-#print 'RMS POS OFF'
-#rmsPOS('20190115_Levantamento_8min_Original_IonoTropoOn.pos')
-#print
-
-
-print'Standard Deviation POS OFF'
-sdPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
-print
-
-print 'Standard Deviation POS Broad and Saas'
-sdPOS('20190115_LevantamentoCompleto.pos')
-print
-
-
-print 'RMS POS OFF'
-rmsPOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
-print
-
-print 'RMS POS Broad and Saas'
-rmsPOS('20190115_LevantamentoCompleto.pos')
-print
-
-print 'Average Error NMEA'
-averageNMEA('20190115_092503.txt')
-print
-
-print 'Average Error POS OFF'
-averagePOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
-print
-
-print 'Average Error POS Broad and Saas'
-averagePOS('20190115_LevantamentoCompleto.pos')
-print
-
-#averagePOS('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos')
-#createExcel('20190117_064503.txt',errorNMEA('20190117_064503.txt'))
-#createExcel('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos',errorPOSsmartphone('20190115_LevantamentoCompleto_Iono OFF e Tropo OFF.pos'))
-#createExcel('ErrorNMEA',adjustmentErrorNMEA('filteredRinex20_G_Debugg_XYZ.pos','02_20170824135855.txt'))
-#createExcelerrorNMEA('02_20170824135855.txt')
-#print deg2xyz(-22.895700560001078, -43.22433159713865, 35.63634614087641)
 """
