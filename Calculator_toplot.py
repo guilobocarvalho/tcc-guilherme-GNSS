@@ -566,6 +566,10 @@ def createExcel(fileName,data):
         row += 1
         
     workbook.close()
+    
+rmsNMEA('20190211.txt')
+averageNMEA('20190211.txt')
+sdNMEA('20190211.txt')
 
 """
 #1) DGNSS posição
